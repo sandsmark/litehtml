@@ -1,8 +1,8 @@
 #pragma once
 
 #include "../../include/litehtml.h"
-#include <cairo.h>
-#include <gtkmm.h>
+#include <QPainter>
+#include <QImage>
 
 struct cairo_clip_box {
     typedef std::vector<cairo_clip_box> vector;
@@ -20,7 +20,8 @@ struct cairo_clip_box {
         box = val.box;
         radius = val.radius;
     }
-    cairo_clip_box &operator=(const cairo_clip_box &val)
+    cairo_clip_box &
+    operator=(const cairo_clip_box &val)
     {
         box = val.box;
         radius = val.radius;
@@ -35,18 +36,18 @@ struct cairo_font {
     bool                strikeout;
 };
 
-class container_linux : public litehtml::document_container
+class container_qt : public litehtml::document_container
 {
     typedef std::map<litehtml::tstring, Glib::RefPtr<Gdk::Pixbuf> > images_map;
 
 protected:
-    cairo_surface_t            *m_temp_surface;
-    cairo_t                    *m_temp_cr;
-    images_map                  m_images;
-    cairo_clip_box::vector      m_clips;
+    QImage            *m_temp_surface;
+    QPainter                    *m_temp_cr;
+    QHash<QUrl, QImage> m_images;
+    QRegion      m_clips;
 public:
-    container_linux(void);
-    virtual ~container_linux(void);
+    container_qt(void);
+    virtual ~container_qt(void);
 
     virtual litehtml::uint_ptr          create_font(const litehtml::tchar_t *faceName, int size, int weight, litehtml::font_style italic, unsigned int decoration, litehtml::font_metrics *fm) override;
     virtual void                        delete_font(litehtml::uint_ptr hFont) override;
@@ -73,22 +74,37 @@ public:
     virtual void                        del_clip() override;
 
     virtual void                        make_url(const litehtml::tchar_t *url, const litehtml::tchar_t *basepath, litehtml::tstring &out);
-    virtual Glib::RefPtr<Gdk::Pixbuf>   get_image(const litehtml::tchar_t *url, bool redraw_on_ready) = 0;
+    virtual QImage   get_image(const QUrl &url, bool redraw_on_ready) = 0;
 
     void                                clear_images();
 
 protected:
-    virtual void                        draw_ellipse(cairo_t *cr, int x, int y, int width, int height, const litehtml::web_color &color, int line_width);
-    virtual void                        fill_ellipse(cairo_t *cr, int x, int y, int width, int height, const litehtml::web_color &color);
-    virtual void                        rounded_rectangle(cairo_t *cr, const litehtml::position &pos, const litehtml::border_radiuses &radius);
+    virtual void                        draw_ellipse(QPainter *cr, int x, int y, int width, int height, const litehtml::web_color &color, int line_width);
+    virtual void                        fill_ellipse(QPainter *cr, int x, int y, int width, int height, const litehtml::web_color &color);
+    virtual void                        rounded_rectangle(QPainter *cr, const litehtml::position &pos, const litehtml::border_radiuses &radius);
 
 private:
-    void                                apply_clip(cairo_t *cr);
-    void                                add_path_arc(cairo_t *cr, double x, double y, double rx, double ry, double a1, double a2, bool neg);
-    void                                set_color(cairo_t *cr, litehtml::web_color color)
-    {
-        cairo_set_source_rgba(cr, color.red / 255.0, color.green / 255.0, color.blue / 255.0, color.alpha / 255.0);
+    static QUrl qUrl(const litehtml::tchar_t *url, const litehtml::tchar_t *basepath) {
+        if (basepath) {
+            QUrl ret(QString::fromLocal8Bit(basepath));
+            ret.setPath(ret.path() + QLatin1Char('/') + QString::fromLocal8Bit(url));
+            qDebug() << ret;
+            return ret;
+        } else {
+            qDebug() << QUrl(QString::fromLocal8Bit(url));
+            return QUrl(QString::fromLocal8Bit(url));
+        }
     }
-    void                                draw_pixbuf(cairo_t *cr, const Glib::RefPtr<Gdk::Pixbuf> &bmp, int x, int y, int cx, int cy);
-    cairo_surface_t                    *surface_from_pixbuf(const Glib::RefPtr<Gdk::Pixbuf> &bmp);
+
+    void                                apply_clip(QPainter *cr);
+    void                                add_path_arc(QPainter *cr, double x, double y, double rx, double ry, double a1, double a2, bool neg);
+    void
+    set_color(QPainter *cr, litehtml::web_color color)
+    {
+        QPen pen = cr->pen();
+        pen.setColor(qRgba(color.red, color.green, color.blue, color.alpha));
+        cr->setPen(pen);
+    }
+    void                                draw_pixbuf(QPainter *cr, const Glib::RefPtr<Gdk::Pixbuf> &bmp, int x, int y, int cx, int cy);
+    //cairo_surface_t                    *surface_from_pixbuf(const Glib::RefPtr<Gdk::Pixbuf> &bmp);
 };

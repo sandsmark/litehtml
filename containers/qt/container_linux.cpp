@@ -1,4 +1,4 @@
-#include "container_linux.h"
+#include "container_qt.h"
 #define _USE_MATH_DEFINES
 #include <math.h>
 
@@ -6,188 +6,114 @@
 #       define M_PI    3.14159265358979323846
 #endif
 
-container_linux::container_linux(void)
+container_qt::container_qt(void)
 {
-    m_temp_surface  = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 2, 2);
-    m_temp_cr       = cairo_create(m_temp_surface);
+    m_temp_surface  = new QImage(2, 2, QImage::Format_ARGB32);
+    m_temp_cr       = new QPainter(m_temp_surface);
 }
 
-container_linux::~container_linux(void)
+container_qt::~container_qt(void)
 {
     clear_images();
-    cairo_surface_destroy(m_temp_surface);
-    cairo_destroy(m_temp_cr);
+    delete m_temp_cr;
+    delete m_temp_surface;
 }
 
-litehtml::uint_ptr container_linux::create_font(const litehtml::tchar_t *faceName, int size, int weight, litehtml::font_style italic, unsigned int decoration, litehtml::font_metrics *fm)
+litehtml::uint_ptr container_qt::create_font(const litehtml::tchar_t *faceName, int size, int weight, litehtml::font_style italic, unsigned int decoration, litehtml::font_metrics *fm)
 {
+    // TODO: easier way? Or do we need to use QFontDatabase::families() and match manually?
     litehtml::string_vector fonts;
     litehtml::split_string(faceName, fonts, ",");
     litehtml::trim(fonts[0]);
-
-    cairo_font_face_t *fnt = 0;
-
-    FcPattern *pattern = FcPatternCreate();
-    bool found = false;
+    QStringList families;
     for (litehtml::string_vector::iterator i = fonts.begin(); i != fonts.end(); i++) {
-        if (FcPatternAddString(pattern, FC_FAMILY, (unsigned char *) i->c_str())) {
-            found = true;
-            break;
-        }
+        families.append(QString::fromStdString(*i));
     }
-    if (found) {
-        if (italic == litehtml::fontStyleItalic) {
-            FcPatternAddInteger(pattern, FC_SLANT, FC_SLANT_ITALIC);
-        } else {
-            FcPatternAddInteger(pattern, FC_SLANT, FC_SLANT_ROMAN);
-        }
+    qDebug() << "Got families" << families;
 
-        int fc_weight = FC_WEIGHT_NORMAL;
-        if (weight >= 0 && weight < 150) {
-            fc_weight = FC_WEIGHT_THIN;
-        } else if (weight >= 150 && weight < 250) {
-            fc_weight = FC_WEIGHT_EXTRALIGHT;
-        } else if (weight >= 250 && weight < 350) {
-            fc_weight = FC_WEIGHT_LIGHT;
-        } else if (weight >= 350 && weight < 450) {
-            fc_weight = FC_WEIGHT_NORMAL;
-        } else if (weight >= 450 && weight < 550) {
-            fc_weight = FC_WEIGHT_MEDIUM;
-        } else if (weight >= 550 && weight < 650) {
-            fc_weight = FC_WEIGHT_SEMIBOLD;
-        } else if (weight >= 650 && weight < 750) {
-            fc_weight = FC_WEIGHT_BOLD;
-        } else if (weight >= 750 && weight < 850) {
-            fc_weight = FC_WEIGHT_EXTRABOLD;
-        } else if (weight >= 950) {
-            fc_weight = FC_WEIGHT_BLACK;
-        }
+    QFont *font = new QFont;
+    font->setFamilies(families);
 
-        FcPatternAddInteger(pattern, FC_WEIGHT, fc_weight);
-
-        fnt = cairo_ft_font_face_create_for_pattern(pattern);
+    int fc_weight = QFont::Normal;
+    // TODO: I think we can just divide by 10, since setWeight just takes an int
+    if (weight < 0) {
+        qWarning() << "Invalid weight";
+    } else if (weight < 150) {
+        fc_weight = QFont::Thin;
+    } else if (weight < 250) {
+        fc_weight = QFont::ExtraLight;
+    } else if (weight < 350) {
+        fc_weight = QFont::Light;
+    } else if (weight < 450) {
+        fc_weight = QFont::Normal;
+    } else if (weight < 550) {
+        fc_weight = QFont::Medium;
+    } else if (weight < 650) {
+        fc_weight = QFont::DemiBold;
+    } else if (weight < 750) {
+        fc_weight = QFont::Bold;
+    } else if (weight < 850) {
+        fc_weight = QFont::ExtraBold;
+    } else if (weight >= 950) {
+        fc_weight = QFont::Black;
     }
+    font->setWeight(fc_weight);
 
-    FcPatternDestroy(pattern);
+    font->setPixelSize(size); // TODO: not sure if litehtml uses point size of pixel size
 
-    cairo_font *ret = 0;
+    font->setItalic(italic == litehtml::fontStyleItalic);
+    font->setStrikeOut(decoration & litehtml::font_decoration_linethrough);
+    font->setUnderline(decoration & litehtml::font_decoration_underline);
 
-    if (fm && fnt) {
-        cairo_save(m_temp_cr);
-
-        cairo_set_font_face(m_temp_cr, fnt);
-        cairo_set_font_size(m_temp_cr, size);
-        cairo_font_extents_t ext;
-        cairo_font_extents(m_temp_cr, &ext);
-
-        cairo_text_extents_t tex;
-        cairo_text_extents(m_temp_cr, "x", &tex);
-
-        fm->ascent      = (int) ext.ascent;
-        fm->descent     = (int) ext.descent;
-        fm->height      = (int)(ext.ascent + ext.descent);
-        fm->x_height    = (int) tex.height;
-
-        cairo_restore(m_temp_cr);
-
-        ret = new cairo_font;
-        ret->font       = fnt;
-        ret->size       = size;
-        ret->strikeout  = (decoration & litehtml::font_decoration_linethrough) ? true : false;
-        ret->underline  = (decoration & litehtml::font_decoration_underline) ? true : false;
-
+    if (fm) {
+        QFontMetrics metrics(*font);
+        fm->ascent = metrics.ascent();
+        fm->descent = metrics.descent();
+        fm->height = metrics.height();
+        fm->x_height = metrics.horizontalAdvance(QLatin1Char('x')); // TODO: cairo uses 'x', but usually people use 'M'...
     }
 
-    return (litehtml::uint_ptr) ret;
+
+    return (litehtml::uint_ptr) font;
 }
 
-void container_linux::delete_font(litehtml::uint_ptr hFont)
+void container_qt::delete_font(litehtml::uint_ptr hFont)
 {
-    cairo_font *fnt = (cairo_font *) hFont;
-    if (fnt) {
-        cairo_font_face_destroy(fnt->font);
-        delete fnt;
+    if (!hFont) {
+        return;
     }
+    delete reinterpret_cast<QFont*>(hFont);
 }
 
-int container_linux::text_width(const litehtml::tchar_t *text, litehtml::uint_ptr hFont)
+int container_qt::text_width(const litehtml::tchar_t *text, litehtml::uint_ptr hFont)
 {
-    cairo_font *fnt = (cairo_font *) hFont;
-
-    cairo_save(m_temp_cr);
-
-    cairo_set_font_size(m_temp_cr, fnt->size);
-    cairo_set_font_face(m_temp_cr, fnt->font);
-    cairo_text_extents_t ext;
-    cairo_text_extents(m_temp_cr, text, &ext);
-
-    cairo_restore(m_temp_cr);
-
-    return (int) ext.x_advance;
+    QFont *font = reinterpret_cast<QFont*>(hFont);
+    QFontMetrics metrics(*font);
+    return metrics.horizontalAdvance(QString::fromLocal8Bit(text));
 }
 
-void container_linux::draw_text(litehtml::uint_ptr hdc, const litehtml::tchar_t *text, litehtml::uint_ptr hFont, litehtml::web_color color, const litehtml::position &pos)
+void container_qt::draw_text(litehtml::uint_ptr hdc, const litehtml::tchar_t *text, litehtml::uint_ptr hFont, litehtml::web_color color, const litehtml::position &pos)
 {
-    cairo_font *fnt = (cairo_font *) hFont;
-    cairo_t *cr     = (cairo_t *) hdc;
-    cairo_save(cr);
+    QPainter *cr = reinterpret_cast<QPainter*>(hdc);
 
-    apply_clip(cr);
+    cr->save();
 
-    cairo_set_font_face(cr, fnt->font);
-    cairo_set_font_size(cr, fnt->size);
-    cairo_font_extents_t ext;
-    cairo_font_extents(cr, &ext);
-
-    int x = pos.left();
-    int y = pos.bottom()    - ext.descent;
-
+    cr->setClipRegion(m_clip);
     set_color(cr, color);
+    cr->setFont(*reinterpret_cast<QFont*>(hFont));
 
-    cairo_move_to(cr, x, y);
-    cairo_show_text(cr, text);
+    // TODO no alignment?
+    cr->drawText(pos.x, pos.y, QString::fromLocal8Bit(text));
 
-    int tw = 0;
-
-    if (fnt->underline || fnt->strikeout) {
-        tw = text_width(text, hFont);
-    }
-
-    if (fnt->underline) {
-        cairo_set_line_width(cr, 1);
-        cairo_move_to(cr, x, y + 1.5);
-        cairo_line_to(cr, x + tw, y + 1.5);
-        cairo_stroke(cr);
-    }
-    if (fnt->strikeout) {
-        cairo_text_extents_t tex;
-        cairo_text_extents(cr, "x", &tex);
-
-        int ln_y = y - tex.height / 2.0;
-
-        cairo_set_line_width(cr, 1);
-        cairo_move_to(cr, x, (double) ln_y - 0.5);
-        cairo_line_to(cr, x + tw, (double) ln_y - 0.5);
-        cairo_stroke(cr);
-    }
-
-    cairo_restore(cr);
+    cr->restore();
 }
 
-int container_linux::pt_to_px(int pt)
+int container_qt::get_default_font_size() const
 {
-    GdkScreen *screen = gdk_screen_get_default();
-    double dpi = gdk_screen_get_resolution(screen);
-
-    return (int)((double) pt * dpi / 72.0);
+    return QFont().pixelSize(); // TODO: don't know if litehtml uses points or pixels
 }
 
-int container_linux::get_default_font_size() const
-{
-    return 16;
-}
-
-void container_linux::draw_list_marker(litehtml::uint_ptr hdc, const litehtml::list_marker &marker)
+void container_qt::draw_list_marker(litehtml::uint_ptr hdc, const litehtml::list_marker &marker)
 {
     if (!marker.image.empty()) {
         /*litehtml::tstring url;
@@ -199,23 +125,23 @@ void container_linux::draw_list_marker(litehtml::uint_ptr hdc, const litehtml::l
         {
             if(img_i->second)
             {
-                draw_txdib((cairo_t*) hdc, img_i->second, marker.pos.x, marker.pos.y, marker.pos.width, marker.pos.height);
+                draw_txdib((QPainter*) hdc, img_i->second, marker.pos.x, marker.pos.y, marker.pos.width, marker.pos.height);
             }
         }
         unlock_images_cache();*/
     } else {
         switch (marker.marker_type) {
         case litehtml::list_style_type_circle: {
-            draw_ellipse((cairo_t *) hdc, marker.pos.x, marker.pos.y, marker.pos.width, marker.pos.height, marker.color, 0.5);
+            draw_ellipse((QPainter *) hdc, marker.pos.x, marker.pos.y, marker.pos.width, marker.pos.height, marker.color, 0.5);
         }
         break;
         case litehtml::list_style_type_disc: {
-            fill_ellipse((cairo_t *) hdc, marker.pos.x, marker.pos.y, marker.pos.width, marker.pos.height, marker.color);
+            fill_ellipse((QPainter *) hdc, marker.pos.x, marker.pos.y, marker.pos.width, marker.pos.height, marker.color);
         }
         break;
         case litehtml::list_style_type_square:
             if (hdc) {
-                cairo_t *cr = (cairo_t *) hdc;
+                QPainter *cr = (QPainter *) hdc;
                 cairo_save(cr);
 
                 cairo_new_path(cr);
@@ -233,41 +159,34 @@ void container_linux::draw_list_marker(litehtml::uint_ptr hdc, const litehtml::l
     }
 }
 
-void container_linux::load_image(const litehtml::tchar_t *src, const litehtml::tchar_t *baseurl, bool redraw_on_ready)
+void container_qt::load_image(const litehtml::tchar_t *src, const litehtml::tchar_t *baseurl, bool redraw_on_ready)
 {
-    litehtml::tstring url;
-    make_url(src, baseurl, url);
-    if (m_images.find(url.c_str()) == m_images.end()) {
-        try {
-            Glib::RefPtr<Gdk::Pixbuf> img = get_image(url.c_str(), true);
-            if (img) {
-                m_images[url.c_str()] = img;
-            }
-        } catch (...) {
-            int iii=0;
-            iii++;
-        }
+    const QUrl url = qUrl(src, baseurl);
+
+    // TODO: should we reload?
+    if (m_images.contains(url) && !m_images[url].isNull()) {
+        return;
     }
+    m_images[url] = get_image(url, true);
 }
 
-void container_linux::get_image_size(const litehtml::tchar_t *src, const litehtml::tchar_t *baseurl, litehtml::size &sz)
+void container_qt::get_image_size(const litehtml::tchar_t *src, const litehtml::tchar_t *baseurl, litehtml::size &sz)
 {
-    litehtml::tstring url;
-    make_url(src, baseurl, url);
+    const QUrl url = qUrl(src, baseurl);
 
-    images_map::iterator img = m_images.find(url.c_str());
-    if (img != m_images.end()) {
-        sz.width    = img->second->get_width();
-        sz.height   = img->second->get_height();
+    if (m_images.contains(url)) {
+        const QSize size = m_images[url].size();
+        sz.width = size.width();
+        sz.height = size.height();
     } else {
         sz.width    = 0;
         sz.height   = 0;
     }
 }
 
-void container_linux::draw_background(litehtml::uint_ptr hdc, const litehtml::background_paint &bg)
+void container_qt::draw_background(litehtml::uint_ptr hdc, const litehtml::background_paint &bg)
 {
-    cairo_t *cr = (cairo_t *) hdc;
+    QPainter *cr = (QPainter *) hdc;
     cairo_save(cr);
     apply_clip(cr);
 
@@ -296,7 +215,7 @@ void container_linux::draw_background(litehtml::uint_ptr hdc, const litehtml::ba
             bgbmp = new_img;
         }
 
-        cairo_surface_t *img = surface_from_pixbuf(bgbmp);
+        QImage *img = surface_from_pixbuf(bgbmp);
         cairo_pattern_t *pattern = cairo_pattern_create_for_surface(img);
         cairo_matrix_t flib_m;
         cairo_matrix_init_identity(&flib_m);
@@ -336,20 +255,20 @@ void container_linux::draw_background(litehtml::uint_ptr hdc, const litehtml::ba
     cairo_restore(cr);
 }
 
-void container_linux::make_url(const litehtml::tchar_t *url,    const litehtml::tchar_t *basepath, litehtml::tstring &out)
+void container_qt::make_url(const litehtml::tchar_t *url,    const litehtml::tchar_t *basepath, litehtml::tstring &out)
 {
     out = url;
 }
 
-void container_linux::add_path_arc(cairo_t *cr, double x, double y, double rx, double ry, double a1, double a2, bool neg)
+void container_qt::add_path_arc(QPainter *cr, double x, double y, double rx, double ry, double a1, double a2, bool neg)
 {
     if (rx > 0 && ry > 0) {
 
         cairo_save(cr);
 
-        cairo_translate(cr, x, y);
+        QPainterranslate(cr, x, y);
         cairo_scale(cr, 1, ry / rx);
-        cairo_translate(cr, -x, -y);
+        QPainterranslate(cr, -x, -y);
 
         if (neg) {
             cairo_arc_negative(cr, x, y, rx, a1, a2);
@@ -363,9 +282,9 @@ void container_linux::add_path_arc(cairo_t *cr, double x, double y, double rx, d
     }
 }
 
-void container_linux::draw_borders(litehtml::uint_ptr hdc, const litehtml::borders &borders, const litehtml::position &draw_pos, bool root)
+void container_qt::draw_borders(litehtml::uint_ptr hdc, const litehtml::borders &borders, const litehtml::position &draw_pos, bool root)
 {
-    cairo_t *cr = (cairo_t *) hdc;
+    QPainter *cr = (QPainter *) hdc;
     cairo_save(cr);
     apply_clip(cr);
 
@@ -631,12 +550,12 @@ void container_linux::draw_borders(litehtml::uint_ptr hdc, const litehtml::borde
     cairo_restore(cr);
 }
 
-void container_linux::transform_text(litehtml::tstring &text, litehtml::text_transform tt)
+void container_qt::transform_text(litehtml::tstring &text, litehtml::text_transform tt)
 {
 
 }
 
-void container_linux::set_clip(const litehtml::position &pos, const litehtml::border_radiuses &bdr_radius, bool valid_x, bool valid_y)
+void container_qt::set_clip(const litehtml::position &pos, const litehtml::border_radiuses &bdr_radius, bool valid_x, bool valid_y)
 {
     litehtml::position clip_pos = pos;
     litehtml::position client_pos;
@@ -652,14 +571,14 @@ void container_linux::set_clip(const litehtml::position &pos, const litehtml::bo
     m_clips.emplace_back(clip_pos, bdr_radius);
 }
 
-void container_linux::del_clip()
+void container_qt::del_clip()
 {
     if (!m_clips.empty()) {
         m_clips.pop_back();
     }
 }
 
-void container_linux::apply_clip(cairo_t *cr)
+void container_qt::apply_clip(QPainter *cr)
 {
     for (const auto &clip_box : m_clips) {
         rounded_rectangle(cr, clip_box.box, clip_box.radius);
@@ -667,7 +586,7 @@ void container_linux::apply_clip(cairo_t *cr)
     }
 }
 
-void container_linux::draw_ellipse(cairo_t *cr, int x, int y, int width, int height, const litehtml::web_color &color, int line_width)
+void container_qt::draw_ellipse(QPainter *cr, int x, int y, int width, int height, const litehtml::web_color &color, int line_width)
 {
     if (!cr) {
         return;
@@ -678,7 +597,7 @@ void container_linux::draw_ellipse(cairo_t *cr, int x, int y, int width, int hei
 
     cairo_new_path(cr);
 
-    cairo_translate(cr, x + width / 2.0, y + height / 2.0);
+    QPainterranslate(cr, x + width / 2.0, y + height / 2.0);
     cairo_scale(cr, width / 2.0, height / 2.0);
     cairo_arc(cr, 0, 0, 1, 0, 2 * M_PI);
 
@@ -689,7 +608,7 @@ void container_linux::draw_ellipse(cairo_t *cr, int x, int y, int width, int hei
     cairo_restore(cr);
 }
 
-void container_linux::fill_ellipse(cairo_t *cr, int x, int y, int width, int height, const litehtml::web_color &color)
+void container_qt::fill_ellipse(QPainter *cr, int x, int y, int width, int height, const litehtml::web_color &color)
 {
     if (!cr) {
         return;
@@ -700,7 +619,7 @@ void container_linux::fill_ellipse(cairo_t *cr, int x, int y, int width, int hei
 
     cairo_new_path(cr);
 
-    cairo_translate(cr, x + width / 2.0, y + height / 2.0);
+    QPainterranslate(cr, x + width / 2.0, y + height / 2.0);
     cairo_scale(cr, width / 2.0, height / 2.0);
     cairo_arc(cr, 0, 0, 1, 0, 2 * M_PI);
 
@@ -710,7 +629,7 @@ void container_linux::fill_ellipse(cairo_t *cr, int x, int y, int width, int hei
     cairo_restore(cr);
 }
 
-void container_linux::clear_images()
+void container_qt::clear_images()
 {
     /*  for(images_map::iterator i = m_images.begin(); i != m_images.end(); i++)
         {
@@ -723,19 +642,19 @@ void container_linux::clear_images()
     */
 }
 
-const litehtml::tchar_t *container_linux::get_default_font_name() const
+const litehtml::tchar_t *container_qt::get_default_font_name() const
 {
     return "Times New Roman";
 }
 
-std::shared_ptr<litehtml::element>  container_linux::create_element(const litehtml::tchar_t *tag_name,
+std::shared_ptr<litehtml::element>  container_qt::create_element(const litehtml::tchar_t *tag_name,
         const litehtml::string_map &attributes,
         const std::shared_ptr<litehtml::document> &doc)
 {
     return 0;
 }
 
-void container_linux::rounded_rectangle(cairo_t *cr, const litehtml::position &pos, const litehtml::border_radiuses &radius)
+void container_qt::rounded_rectangle(QPainter *cr, const litehtml::position &pos, const litehtml::border_radiuses &radius)
 {
     cairo_new_path(cr);
     if (radius.top_left_x) {
@@ -763,7 +682,7 @@ void container_linux::rounded_rectangle(cairo_t *cr, const litehtml::position &p
     }
 }
 
-void container_linux::draw_pixbuf(cairo_t *cr, const Glib::RefPtr<Gdk::Pixbuf> &bmp, int x, int y, int cx, int cy)
+void container_qt::draw_pixbuf(QPainter *cr, const Glib::RefPtr<Gdk::Pixbuf> &bmp, int x, int y, int cx, int cy)
 {
     cairo_save(cr);
 
@@ -786,9 +705,9 @@ void container_linux::draw_pixbuf(cairo_t *cr, const Glib::RefPtr<Gdk::Pixbuf> &
     cairo_restore(cr);
 }
 
-cairo_surface_t *container_linux::surface_from_pixbuf(const Glib::RefPtr<Gdk::Pixbuf> &bmp)
+QImage *container_qt::surface_from_pixbuf(const Glib::RefPtr<Gdk::Pixbuf> &bmp)
 {
-    cairo_surface_t *ret = NULL;
+    QImage *ret = NULL;
 
     if (bmp->get_has_alpha()) {
         ret = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, bmp->get_width(), bmp->get_height());
@@ -804,7 +723,7 @@ cairo_surface_t *container_linux::surface_from_pixbuf(const Glib::RefPtr<Gdk::Pi
     return ret;
 }
 
-void container_linux::get_media_features(litehtml::media_features &media) const
+void container_qt::get_media_features(litehtml::media_features &media) const
 {
     litehtml::position client;
     get_client_rect(client);
@@ -819,13 +738,13 @@ void container_linux::get_media_features(litehtml::media_features &media) const
     media.resolution    = 96;
 }
 
-void container_linux::get_language(litehtml::tstring &language, litehtml::tstring &culture) const
+void container_qt::get_language(litehtml::tstring &language, litehtml::tstring &culture) const
 {
     language = _t("en");
     culture = _t("");
 }
 
-void container_linux::link(const std::shared_ptr<litehtml::document> &ptr, const litehtml::element::ptr &el)
+void container_qt::link(const std::shared_ptr<litehtml::document> &ptr, const litehtml::element::ptr &el)
 {
 
 }
