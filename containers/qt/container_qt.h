@@ -120,6 +120,12 @@ private:
             return QUrl(QString::fromLocal8Bit(url));
         }
     }
+    static QColor qColor(const litehtml::web_color &color) {
+        return qRgba(color.red, color.green, color.blue, color.alpha);
+    }
+    static QRect qRect(const litehtml::position &rect) {
+        return QRect(rect.x, rect.y, rect.width, rect.height);
+    }
 
     void                                apply_clip(QPainter *cr);
     void                                add_path_arc(QPainter *cr, double x, double y, double rx, double ry, double a1, double a2, bool neg);
