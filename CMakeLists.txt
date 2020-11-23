@@ -6,6 +6,8 @@ enable_testing()
 
 add_subdirectory(src/gumbo)
 
+find_package(Qt5 COMPONENTS Widgets)
+
 set(SOURCE_LITEHTML
     src/background.cpp
     src/box.cpp
@@ -45,6 +47,8 @@ set(SOURCE_LITEHTML
     src/utf8_strings.cpp
     src/web_color.cpp
     src/num_cvt.cpp
+
+    containers/qt/container_qt.cpp
 )
 
 set(HEADER_LITEHTML
@@ -127,7 +131,7 @@ if (LITEHTML_UTF8)
 endif()
 
 # Gumbo
-target_link_libraries(${PROJECT_NAME} PUBLIC gumbo)
+target_link_libraries(${PROJECT_NAME} PUBLIC gumbo Qt5::Widgets)
 
 # install and export
 install(TARGETS ${PROJECT_NAME}

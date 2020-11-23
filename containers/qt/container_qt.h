@@ -63,8 +63,6 @@ struct cairo_font {
 
 class container_qt : public litehtml::document_container
 {
-    typedef std::map<litehtml::tstring, Glib::RefPtr<Gdk::Pixbuf> > images_map;
-
 protected:
     QImage            *m_temp_surface;
     QPainter                    *m_temp_cr;
@@ -72,6 +70,8 @@ protected:
     QRegion      m_clips;
 public:
     container_qt(void);
+    container_qt(const container_qt&) = delete;
+
     virtual ~container_qt(void);
 
     virtual litehtml::uint_ptr          create_font(const litehtml::tchar_t *faceName, int size, int weight, litehtml::font_style italic, unsigned int decoration, litehtml::font_metrics *fm) override;

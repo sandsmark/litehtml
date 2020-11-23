@@ -23,6 +23,10 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#include "container_qt.h"
+
+#include <string>
+
 container_qt::container_qt(void)
 {
     m_temp_surface  = new QImage(2, 2, QImage::Format_ARGB32);
@@ -212,8 +216,8 @@ void container_qt::draw_background(litehtml::uint_ptr hdc, const litehtml::backg
 
     if (bg.color.alpha) {
         cr->setBrush(qColor(bg.color));
-        cr->drawRoundedRect(qRect(bg.border_box), bg.border_radius);
-        bg.setClipRect(qRect(bg.border_box), Qt::IntersectClip);
+        cr->drawRoundedRect(qRect(bg.border_box), bg.border_radius, bg.border_radius);
+        cr->setClipRect(qRect(bg.border_box), Qt::IntersectClip);
     }
 
     const QUrl url = qUrl(bg.image.c_str(), bg.baseurl.c_str());
@@ -254,32 +258,34 @@ void container_qt::make_url(const litehtml::tchar_t *url,    const litehtml::tch
 void container_qt::add_path_arc(QPainter *cr, double x, double y, double rx, double ry, double a1, double a2, bool neg)
 {
     if (rx > 0 && ry > 0) {
+        cr->drawArc(x, y, rx, ry, a1, a2);
 
-        cairo_save(cr);
+//        cairo_save(cr);
 
-        QPainterranslate(cr, x, y);
-        cairo_scale(cr, 1, ry / rx);
-        QPainterranslate(cr, -x, -y);
+//        QPainterranslate(cr, x, y);
+//        cairo_scale(cr, 1, ry / rx);
+//        QPainterranslate(cr, -x, -y);
 
-        if (neg) {
-            cairo_arc_negative(cr, x, y, rx, a1, a2);
-        } else {
-            cairo_arc(cr, x, y, rx, a1, a2);
-        }
+//        if (neg) {
+//            cairo_arc_negative(cr, x, y, rx, a1, a2);
+//        } else {
+//            cairo_arc(cr, x, y, rx, a1, a2);
+//        }
 
-        cairo_restore(cr);
+//        cairo_restore(cr);
     } else {
-        cairo_move_to(cr, x, y);
+//        cairo_move_to(cr, x, y);
     }
 }
 
 void container_qt::draw_borders(litehtml::uint_ptr hdc, const litehtml::borders &borders, const litehtml::position &draw_pos, bool root)
 {
+    // todo qpainterpath
     QPainter *cr = (QPainter *) hdc;
-    cairo_save(cr);
+//    cairo_save(cr);
     apply_clip(cr);
 
-    cairo_new_path(cr);
+//    cairo_new_path(cr);
 
     int bdr_top     = 0;
     int bdr_bottom  = 0;
@@ -326,12 +332,16 @@ void container_qt::draw_borders(litehtml::uint_ptr hdc, const litehtml::borders 
                          start_angle,
                          end_angle, false);
         } else {
-            cairo_move_to(cr, draw_pos.right() - bdr_right, draw_pos.top() + bdr_top);
-            cairo_line_to(cr, draw_pos.right(), draw_pos.top());
+            cr->drawLine(draw_pos.right() - bdr_right, draw_pos.top() + bdr_top, draw_pos.right(), draw_pos.top());
+//            cairo_move_to(cr, draw_pos.right() - bdr_right, draw_pos.top() + bdr_top);
+//            cairo_line_to(cr, draw_pos.right(), draw_pos.top());
+//            cairo_move_to(cr, draw_pos.right() - bdr_right, draw_pos.top() + bdr_top);
+//            cairo_line_to(cr, draw_pos.right(), draw_pos.top());
         }
 
         if (r_bottom) {
-            cairo_line_to(cr, draw_pos.right(), draw_pos.bottom() - r_bottom);
+//            cairo_line_to(cr, draw_pos.right(), draw_pos.bottom() - r_bottom);
+            cr->drawLine(cr, draw_pos.right(), draw_pos.bottom() - r_bottom);
 
             double start_angle  = 0;
             double end_angle    = start_angle + M_PI / 2.0  / ((double) bdr_bottom / (double) bdr_right + 1);
